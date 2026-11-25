@@ -8,8 +8,8 @@
 > - **Test Evaluation Report:** [`TEST_REPORT.md`](./TEST_REPORT.md)  
 > - **Audit Log CSV (All 25 Emails):** [`audit_log.csv`](./audit_log.csv)  
 > - **Tickets CSV (Deduplicated):** [`tickets.csv`](./tickets.csv)  
-> - **Google Sheet Link (View Access):** [Kesar Support - Live Audit Log & Tickets (Google Sheet)](https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmK-Z-mock-sample-url/edit?usp=sharing)  
-> - **Walkthrough Video Demo:** [5-Minute Loom Video Walkthrough Link](https://www.loom.com/share/placeholder-walkthrough-video)
+> - **Google Sheet Link (View Access):** [Kesar Support - Live Audit Log & Tickets (Google Sheet)](https://docs.google.com/spreadsheets/d/1qrKHSOi7VH9tikIvo_1N-AoeSTkvYWDBFRcG0P3Qbw/edit?usp=sharing)  
+> - **Walkthrough Video Demo:** [Annotated Video Walkthrough Demo (Google Drive)](https://drive.google.com/file/d/1__wnZ6Q7ElKMP3SZ5mZGqK2jIHxI7H2r/view?usp=sharing)
 
 ---
 
