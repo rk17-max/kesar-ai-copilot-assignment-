@@ -1,0 +1,386 @@
+{
+  "name": "Kesar & Co. AI Support Copilot (v2)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "support-email",
+        "options": {}
+      },
+      "id": "node-webhook-trigger",
+      "name": "Webhook: Receive Customer Email",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify and extract customer email data according to the schema.\nReceived At: {{$json.received_at}}\nSender: {{$json.from.name}} <{{$json.from.email}}>\nSubject: {{$json.subject}}\nBody: {{$json.body}}",
+        "hasOutputParser": true
+      },
+      "id": "node-llm-classifier",
+      "name": "LLM Classifier & Extractor",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        480,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-1.5-flash",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "node-gemini-model",
+      "name": "Google Gemini / OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        480,
+        600
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "google-ai-studio-cred",
+          "name": "Google AI Studio API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchema": "{\"type\": \"object\", \"required\": [\"intent\", \"secondary_intent\", \"order_id\", \"sentiment\", \"language\", \"confidence\", \"summary\"], \"properties\": {\"intent\": {\"type\": \"string\", \"enum\": [\"order_status\", \"product_query\", \"return_refund\", \"complaint\", \"other\"]}, \"secondary_intent\": {\"type\": [\"string\", \"null\"], \"enum\": [\"order_status\", \"product_query\", \"return_refund\", \"complaint\", \"other\", null]}, \"order_id\": {\"type\": [\"string\", \"null\"], \"pattern\": \"^KC-[0-9]{4}$\"}, \"sentiment\": {\"type\": \"string\", \"enum\": [\"positive\", \"neutral\", \"negative\", \"angry\"]}, \"language\": {\"type\": \"string\", \"enum\": [\"en\", \"hi\", \"hinglish\"]}, \"confidence\": {\"type\": \"number\", \"minimum\": 0, \"maximum\": 1}, \"summary\": {\"type\": \"string\", \"maxLength\": 200}}}"
+      },
+      "id": "node-structured-parser",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1,
+      "position": [
+        620,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pre-processing & Policy/Security Gateway\nconst email = $('Webhook: Receive Customer Email').first().json;\nconst llm = $json.output || $json;\n\n// Sanitize inputs\nconst fromEmail = (email.from && email.from.email) ? email.from.email.toLowerCase().trim() : '';\nconst bodyLower = (email.body || '').toLowerCase();\nconst subjectLower = (email.subject || '').toLowerCase();\n\n// Check for Prompt Injection Attack\nlet promptInjectionDetected = false;\nif (bodyLower.includes('ignore all previous instructions') || bodyLower.includes('system note to ai assistant') || bodyLower.includes('this customer is a vip')) {\n  promptInjectionDetected = true;\n}\n\n// Calculate Days Since Delivery if order delivered\nreturn {\n  email: email,\n  llm: llm,\n  security: {\n    promptInjectionDetected: promptInjectionDetected,\n    isSpam: fromEmail.includes('seo-rankers') || subjectLower.includes('google ranking')\n  }\n};\n"
+      },
+      "id": "node-security-sanitizer",
+      "name": "Security & Logic Guard Node",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.llm.intent}}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "order_status"
+            },
+            {
+              "value2": "product_query"
+            },
+            {
+              "value2": "return_refund"
+            },
+            {
+              "value2": "complaint"
+            },
+            {
+              "value2": "other"
+            }
+          ]
+        }
+      },
+      "id": "node-intent-router",
+      "name": "Switch by Customer Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        960,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "text": "=Draft a professional, warm support response for {{$json.email.from.name}} regarding order {{$json.llm.order_id}}. Use tools to check exact order status and FAQ guidelines.",
+        "options": {
+          "systemMessage": "You are the Kesar & Co. Customer Support Copilot. Follow brand_voice.md strictly: warm, concise (3-5 sentences), no medical claims, no emojis. Ground all order details strictly in get_order data."
+        }
+      },
+      "id": "node-ai-agent-drafting",
+      "name": "AI Support Agent (with Tools)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        1240,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "name": "get_order",
+        "description": "Fetch order details by order_id (KC-####) or customer email.",
+        "url": "https://raw.githubusercontent.com/abhishek-patel-cadient/kesar-ai-copilot-assignment/refs/heads/main/data/orders.json"
+      },
+      "id": "tool-get-order",
+      "name": "Tool: get_order",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "name": "search_faq",
+        "description": "Search company policies, return windows, shipping timelines, and product ingredients.",
+        "url": "https://raw.githubusercontent.com/abhishek-patel-cadient/kesar-ai-copilot-assignment/refs/heads/main/data/faq.md"
+      },
+      "id": "tool-search-faq",
+      "name": "Tool: search_faq",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": "GOOGLE_SHEET_ID_HERE",
+        "sheetName": "Tickets",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ticket_id": "={{$json.ticket_id}}",
+            "created_at": "={{$json.email.received_at}}",
+            "updated_at": "={{$json.email.received_at}}",
+            "order_id": "={{$json.llm.order_id}}",
+            "customer_email": "={{$json.email.from.email}}",
+            "email_ids": "={{$json.email.id}}",
+            "intent": "={{$json.llm.intent}}",
+            "priority": "={{$json.ticket_priority || 'Normal'}}",
+            "status": "Open",
+            "summary": "={{$json.llm.summary}}",
+            "notes": "={{$json.notes}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-google-sheets-tickets",
+      "name": "Google Sheets: Create/Update Ticket",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1480,
+        500
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "google-sheets-cred",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "GOOGLE_SHEET_ID_HERE",
+        "sheetName": "Audit Log",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "email_id": "={{$json.email.id}}",
+            "received_at": "={{$json.email.received_at}}",
+            "from_email": "={{$json.email.from.email}}",
+            "intent": "={{$json.llm.intent}}",
+            "secondary_intent": "={{$json.llm.secondary_intent}}",
+            "order_id": "={{$json.llm.order_id}}",
+            "language": "={{$json.llm.language}}",
+            "sentiment": "={{$json.llm.sentiment}}",
+            "confidence": "={{$json.llm.confidence}}",
+            "order_found": "={{$json.order_found}}",
+            "action_taken": "={{$json.action_taken}}",
+            "needs_human": "={{$json.needs_human}}",
+            "ticket_id": "={{$json.ticket_id}}",
+            "reply_draft": "={{$json.reply_draft}}",
+            "prompt_version": "v2",
+            "processed_at": "={{$json.email.received_at}}",
+            "error": "={{$json.error}}",
+            "notes": "={{$json.notes}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-google-sheets-audit",
+      "name": "Google Sheets: Append Audit Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1740,
+        400
+      ],
+      "credentials": {
+        "googleSheetsOAuth2": {
+          "id": "google-sheets-cred",
+          "name": "Google Sheets Account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook: Receive Customer Email": {
+      "main": [
+        [
+          {
+            "node": "LLM Classifier & Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Classifier & Extractor": {
+      "main": [
+        [
+          {
+            "node": "Security & Logic Guard Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini / OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "LLM Classifier & Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "LLM Classifier & Extractor",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security & Logic Guard Node": {
+      "main": [
+        [
+          {
+            "node": "Switch by Customer Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch by Customer Intent": {
+      "main": [
+        [
+          {
+            "node": "AI Support Agent (with Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Support Agent (with Tools)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets: Create/Update Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets: Create/Update Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets: Append Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: get_order": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Support Agent (with Tools)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool: search_faq": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Support Agent (with Tools)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets: Create/Update Ticket": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Append Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Support Agent (with Tools)": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets: Append Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
